@@ -11,7 +11,7 @@ st.markdown("---")
 # [A] 글로벌 상태(Session State) 초기화 (모든 변수 + Tag No.)
 # =========================================================
 init_state = {
-    'tag_no': 'HE-101',  # 장비 Tag No. 추가
+    'tag_no': 'HE-101', 
     # 1. 유체 타입 및 기본 물성
     'fluid_type': "Liquid (뉴턴 유체 - 물, 오일 등)",
     't_rho': 998.0, 't_cp': 4180.0, 't_k': 0.6, 't_mu': 0.001,
@@ -31,7 +31,6 @@ init_state = {
     'R_fi': 0.000176, 'R_fo': 0.000176
 }
 
-# Session State 동기화
 for k, v in init_state.items():
     if k not in st.session_state:
         st.session_state[k] = v
@@ -59,7 +58,6 @@ with st.sidebar:
     st.header("💾 설계 시나리오 (Save/Load)")
     st.info("현재 화면의 모든 입력값이 JSON으로 추적됩니다.")
     
-    # JSON 파일명에 Tag No 연동
     current_tag = st.session_state.get('tag_no', 'default_tag')
     filename = f"{current_tag}_design_data.json"
     
@@ -72,7 +70,6 @@ with st.sidebar:
     st.text_area("JSON 텍스트 입력창:", value=json.dumps(init_state, indent=4), key='json_input_text', height=200)
     st.button("시나리오 적용 (Load)", on_click=apply_json, use_container_width=True)
 
-# 메인 화면 최상단 Tag No 표시
 st.subheader(f"🏷️ Current Equipment Tag: **{st.session_state['tag_no']}**")
 
 # =========================================================
@@ -85,18 +82,18 @@ col_tube, col_shell = st.columns(2)
 
 with col_tube:
     st.markdown("#### **Tube-side (Inner Fluid)**")
-    st.number_input("혼합 밀도 (kg/m³)", key='t_rho', help="일반 액체: 700~1000, 슬러리: 1100~1800 이상")
-    st.number_input("비열 (J/kg·K)", key='t_cp', help="물: 4180, 일반 오일류: 1800~2400")
-    st.number_input("열전도도 (W/m·K)", key='t_k', help="물: 0.6, 일반 오일류: 0.1~0.2")
+    st.number_input("혼합 밀도 (kg/m³)", key='t_rho', help="일반 액체: 700 - 1000, 슬러리: 1100 - 1800 이상")
+    st.number_input("비열 (J/kg·K)", key='t_cp', help="물: 4180, 일반 오일류: 1800 - 2400")
+    st.number_input("열전도도 (W/m·K)", key='t_k', help="물: 0.6, 일반 오일류: 0.1 - 0.2")
     
     if "Liquid" in st.session_state['fluid_type']:
-        st.number_input("동점성 계수 (Pa·s)", format="%.4f", key='t_mu', help="물(20°C): 0.001 Pa·s, 경질유: 0.002~0.010")
+        st.number_input("동점성 계수 (Pa·s)", format="%.4f", key='t_mu', help="물(20°C 기준): 0.001 Pa·s, 경질유: 0.002 - 0.010")
         st.success("✅ 뉴턴 유체 모드 (Dittus-Boelter / Ito 상관식)")
     else:
         st.warning("🚨 비뉴턴 유체 모드 (Metzner-Reed 일반화 수식 적용)")
         st.selectbox("유변학 모델 선택", ["Power-law (멱법칙)", "Bingham Plastic (빙햄 가소성)"], key='rheology_model')
         if st.session_state['rheology_model'] == "Bingham Plastic (빙햄 가소성)":
-            st.number_input("항복 응력 (Yield stress, Pa)", step=1.0, key='tau_y', help="유동이 시작되기 위한 최소 응력. 펄프/고농도 슬러리: 5~50 Pa")
+            st.number_input("항복 응력 (Yield stress, Pa)", step=1.0, key='tau_y', help="유동이 시작되기 위한 최소 응력. 펄프/고농도 슬러리: 5 - 50 Pa")
             st.number_input("가소성 점도 (Pa·s)", format="%.4f", key='plastic_visc')
         else:
             st.number_input("점조도 지수 K (Pa·sⁿ)", format="%.4f", key='consistency_k')
@@ -127,8 +124,8 @@ with col_pc3:
     st.number_input("Shell 입구 온도 (°C)", key='T_cold_in')
     st.number_input("Shell 목표 출구 온도 (°C)", key='T_cold_out', help="주의: Tube 출구 온도와의 Temperature Cross(온도 역전)가 심하면 LMTD 보정계수(F)가 급감하여 설계가 불가능해질 수 있습니다.")
 with col_pc4:
-    st.number_input("Tube 허용 ΔP (bar)", 0.1, 10.0, step=0.1, key='allowable_dp_tube', help="[TEMA Guide] 일반 유체: 0.5~0.7 bar, 점성 유체/슬러리: 1.0~1.5 bar 허용")
-    st.number_input("Shell 허용 ΔP (bar)", 0.1, 10.0, step=0.1, key='allowable_dp_shell', help="Shell 측은 구조물(Baffle 등)에 의한 손실이 크므로 0.3~0.5 bar 이내 설계를 권장합니다.")
+    st.number_input("Tube 허용 ΔP (bar)", 0.1, 10.0, step=0.1, key='allowable_dp_tube', help="일반 유체: 0.5 - 0.7 bar, 점성 유체/슬러리: 1.0 - 1.5 bar 허용 권장")
+    st.number_input("Shell 허용 ΔP (bar)", 0.1, 10.0, step=0.1, key='allowable_dp_shell', help="Shell 측은 코일 외부 환상 공간 유동의 특성을 고려하여 0.3 - 0.5 bar 이내 설계를 권장합니다.")
 
 # LMTD 및 Q 사전 계산 (온도 역전 예외 처리 강화)
 Q_kW_tube = (st.session_state['m_hot'] / 3600.0) * (st.session_state['t_cp'] / 1000.0) * abs(st.session_state['T_hot_in'] - st.session_state['T_hot_out'])
@@ -153,12 +150,11 @@ st.subheader("3. 기하학적 설계 변수 및 튜브 재질")
 col_g1, col_g2, col_g3, col_g4 = st.columns(4)
 
 with col_g1:
-    st.slider("튜브 외경 (d_o, mm)", 10.0, 50.0, step=0.1, key='d_o', help="[표준 튜브 외경] 19.05mm (3/4인치), 25.4mm (1인치)를 가장 많이 사용합니다.")
-    st.number_input("튜브 두께 (t, mm)", 1.0, 5.0, step=0.1, key='t_thick', help="BWG(Birmingham Wire Gauge) 기준: BWG 14 (2.11mm), BWG 16 (1.65mm) 권장.")
+    st.slider("튜브 외경 (d_o, mm)", 10.0, 50.0, step=0.1, key='d_o', help="[표준 튜브 외경] 19.05 mm (3/4인치), 25.4 mm (1인치)를 가장 많이 사용합니다.")
+    st.number_input("튜브 두께 (t, mm)", 1.0, 5.0, step=0.1, key='t_thick', help="BWG(Birmingham Wire Gauge) 기준: BWG 14 (2.11 mm), BWG 16 (1.65 mm) 권장.")
     d_i = st.session_state['d_o'] - 2 * st.session_state['t_thick']
     st.caption(f"✓ 내경 (d_i): **{d_i:.2f} mm**")
     
-    # 재질 및 열전도도 동적 할당
     mat_dict = {
         'Carbon Steel (k = 45 W/m·K)': 45.0,
         'Stainless Steel 304 (k = 15 W/m·K)': 15.0,
@@ -169,7 +165,6 @@ with col_g1:
         'Copper (k = 400 W/m·K)': 400.0,
         'Custom (사용자 지정)': st.session_state.get('tube_k_wall', 16.0)
     }
-    # JSON 로드 시 등록되지 않은 값이 들어오는 것을 방지하는 안전장치
     if st.session_state['tube_material'] not in mat_dict:
         st.session_state['tube_material'] = 'Stainless Steel 316 (k = 16 W/m·K)'
         
@@ -184,7 +179,7 @@ with col_g2:
     min_Dc = st.session_state['d_o'] / 0.1
     current_Dc = max(st.session_state['D_c'], min_Dc)
     st.session_state['D_c'] = current_Dc
-    st.slider("코일 중심 직경 (D_c, mm)", float(min_Dc), 2000.0, step=10.0, key='D_c', help="제작 한계성(Fabrication Limit): 코일 중심 직경이 외경의 10배보다 작으면 벤딩 시 튜브가 파열됩니다.")
+    st.slider("코일 중심 직경 (D_c, mm)", float(min_Dc), 2000.0, step=10.0, key='D_c', help="제작 한계성(Fabrication Limit): 코일 중심 직경이 외경의 10배보다 작으면 벤딩 시 튜브 파열 위험이 큽니다.")
     curvature_ratio = d_i / st.session_state['D_c']
     st.caption(f"✓ 곡률비: **{curvature_ratio:.4f}** (권장 < 0.1)")
 
@@ -192,18 +187,18 @@ with col_g3:
     min_pitch = st.session_state['d_o'] * 1.25
     current_pitch = max(st.session_state['pitch'], min_pitch)
     st.session_state['pitch'] = current_pitch
-    st.slider("코일 피치 (p, mm)", float(min_pitch), 300.0, step=1.0, key='pitch', help="[TEMA 기준] 피치는 최소 튜브 외경의 1.25배 이상이어야 조립 및 세척 공간이 확보됩니다.")
+    st.slider("코일 피치 (p, mm)", float(min_pitch), 300.0, step=1.0, key='pitch', help="안정적인 조립 및 튜브 간 간섭을 막기 위해 최소 튜브 외경의 1.25배 이상이어야 합니다.")
     
     min_Ds = st.session_state['D_c'] + st.session_state['d_o'] + 20.0
     current_Ds = max(st.session_state['D_s'], min_Ds)
     st.session_state['D_s'] = current_Ds
-    st.number_input("쉘 내경 (D_s, mm)", float(min_Ds), 3000.0, step=10.0, key='D_s', help="코일 외경 대비 최소 20~50mm의 클리어런스가 필요합니다.")
+    st.number_input("쉘 내경 (D_s, mm)", float(min_Ds), 3000.0, step=10.0, key='D_s', help="코일 외경 대비 최소 20 - 50 mm의 여유 공간(Clearance)이 필요합니다.")
 
 with col_g4:
-    R_fi_help = "[내부 오염계수 권장치]\n- 청정수/증류수: 0.0001\n- 일반 냉각수: 0.0003~0.0005\n- 해수: 0.0007\n- 점성 오일/슬러리: 0.0010~0.0020"
+    R_fi_help = "[내부 오염계수 권장치]\n- 청정수/증류수: 0.0001\n- 일반 냉각수: 0.0003 - 0.0005\n- 해수: 0.0007\n- 점성 오일/슬러리: 0.0010 - 0.0020"
     st.number_input("Tube 오염계수 R_fi (m²K/W)", 0.0, 0.02, format="%.6f", key='R_fi', help=R_fi_help)
     
-    R_fo_help = "[외부 오염계수 권장치]\n- 압축공기/가스: 0.0004\n- 순환 냉각수: 0.0003\n- 크루드 오일: 0.0015~0.0025\n* 쉘 측은 세척이 어려우므로 보수적으로 접근 요망."
+    R_fo_help = "[외부 오염계수 권장치]\n- 압축공기/가스: 0.0004\n- 순환 냉각수: 0.0003\n- 크루드 오일: 0.0015 - 0.0025\n* 쉘 측은 세척이 어려우므로 보수적으로 접근 요망."
     st.number_input("Shell 오염계수 R_fo (m²K/W)", 0.0, 0.02, format="%.6f", key='R_fo', help=R_fo_help)
 
 st.markdown("---")
@@ -217,15 +212,13 @@ m_hot_kg_s = st.session_state['m_hot'] / 3600.0
 A_c = np.pi * ((d_i / 1000.0) ** 2) / 4.0
 v_tube = m_hot_kg_s / (st.session_state['t_rho'] * A_c) if A_c > 0 else 0
 
-# 침식 및 진동 경고 시스템
 if "Slurry" in st.session_state['fluid_type'] and v_tube > 2.5:
-    st.error(f"🚨 침식 한계 초과: 슬러리 유속({v_tube:.2f} m/s)이 2.5 m/s를 초과했습니다. 외벽 맹렬한 마모가 예상되니 튜브 외경(d_o)을 키우십시오.")
+    st.error(f"🚨 침식 한계 초과: 슬러리 유속({v_tube:.2f} m/s)이 2.5 m/s를 초과했습니다. 외벽 마모가 우려되니 튜브 외경(d_o)을 키우십시오.")
 elif v_tube > 5.0:
     st.warning(f"⚠️ 진동 경고 (FIV): 유속({v_tube:.2f} m/s)이 5.0 m/s를 초과했습니다. 튜브 파손 및 펌프 양정 부족 현상을 주의하십시오.")
 elif v_tube < 0.5:
     st.info(f"💡 정체 경고: 유속({v_tube:.2f} m/s)이 너무 느려 스케일(Fouling)이 급속도로 퇴적될 수 있습니다. (권장: 1.0 m/s 이상)")
 
-# Tube-side 수력학 분기 (Liquid vs Slurry)
 if "Liquid" in st.session_state['fluid_type']:
     Re = (st.session_state['t_rho'] * v_tube * (d_i / 1000.0)) / st.session_state['t_mu']
     Pr = (st.session_state['t_cp'] * st.session_state['t_mu']) / st.session_state['t_k']
@@ -242,7 +235,6 @@ if "Liquid" in st.session_state['fluid_type']:
         f_c = 0.304 / (max(Re, 1.0) ** 0.25) + 0.029 * np.sqrt(curvature_ratio)
         flow_regime = "난류 (Turbulent)"
 else:
-    # Slurry (Generalized Metzner-Reed)
     n_val = st.session_state['flow_index_n'] if st.session_state['rheology_model'] == "Power-law (멱법칙)" else 1.0
     K_val = st.session_state['consistency_k'] if st.session_state['rheology_model'] == "Power-law (멱법칙)" else st.session_state['plastic_visc']
     D_m = d_i / 1000.0
@@ -266,11 +258,9 @@ else:
         f_c = 0.304 / (max(Re, 1.0) ** 0.25) + 0.029 * np.sqrt(curvature_ratio)
         flow_regime = "슬러리 난류 (Turbulent)"
 
-# 곡률 보정 Nusselt 및 열전달계수
 Nu_calc = Nu_straight * (1.0 + 3.5 * curvature_ratio)
 h_i = (Nu_calc * st.session_state['t_k']) / (d_i / 1000.0)
 
-# Shell-side 단순화 연산
 m_cold_kg_s = st.session_state['m_cold'] / 3600.0
 A_free_flow = (np.pi/4) * ((st.session_state['D_s']/1000.0)**2 - (st.session_state['D_c']/1000.0)**2)
 v_shell = m_cold_kg_s / (st.session_state['s_rho'] * A_free_flow) if A_free_flow > 0 else 0.0
@@ -279,10 +269,8 @@ Pr_shell = (st.session_state['s_cp'] * st.session_state['s_mu']) / st.session_st
 Nu_shell = 0.33 * (max(Re_shell, 1.0) ** 0.6) * (Pr_shell ** 0.33)
 h_o = (Nu_shell * st.session_state['s_k']) / (st.session_state['d_o'] / 1000.0)
 
-# Wall 저항 계산 (재질 변수 연동 완료)
 R_wall = ((st.session_state['d_o'] / 1000.0) * np.log(st.session_state['d_o'] / d_i)) / (2.0 * st.session_state['tube_k_wall'])
 
-# 총괄 열전달 계수 (U) 합산
 sum_resistances = (1.0 / max(h_o, 0.1)) + st.session_state['R_fo'] + R_wall + st.session_state['R_fi'] * (st.session_state['d_o'] / d_i) + (st.session_state['d_o'] / d_i) * (1.0 / max(h_i, 0.1))
 U_calc = 1.0 / sum_resistances
 
@@ -293,7 +281,6 @@ Area = (Q_kW_tube * 1000.0) / (U_calc * LMTD) if LMTD > 0 else 0.0
 Tube_length = Area / (np.pi * (st.session_state['d_o'] / 1000.0))
 Turns = Tube_length / (np.pi * (st.session_state['D_c'] / 1000.0))
 
-# 달시-바이스바흐 압력 강하 (bar 변환)
 dp_tube_pa = f_c * (Tube_length / (d_i / 1000.0)) * (st.session_state['t_rho'] * (v_tube ** 2) / 2.0)
 dp_tube_bar = dp_tube_pa / 100000.0
 
@@ -321,7 +308,7 @@ else:
 st.markdown("---")
 st.subheader("5. 3D 코일 형상 (Schematic Representation)")
 
-if Turns > 0 and Turns < 5000: # 무한루프 방지
+if Turns > 0 and Turns < 5000:
     t = np.linspace(0, Turns * 2 * np.pi, int(max(Turns * 50, 100)))
     x = (st.session_state['D_c'] / 2) * np.cos(t)
     y = (st.session_state['D_c'] / 2) * np.sin(t)
