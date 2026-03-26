@@ -357,15 +357,16 @@ if Turns_per_Tube > 0 and Turns_per_Tube < 2000:
     ))
     
     # 5. [추가] 코일 지지대 (Support Structure - 도식적 원기둥 바)
-    # Mandrel에 고정되는 4방향 지지바 가정
+        # 5. [추가] 코일 지지대 (Support Structure - 도식적 원기둥 바)
     sup_r = noz_r / 2.0
-    # Mandrel 외경과 Shell 내경 사이의 지지공간
     sup_lx = (st.session_state['D_mandrel'] / 2.0)
     sup_rx = (st.session_state['D_s'] / 2.0)
     
     supports_angles = [0, np.pi/2, np.pi, 3*np.pi/2]
-    # 3개 층의 지지대 배치
     support_levels = [coil_height * 0.25, coil_height * 0.5, coil_height * 0.75]
+    
+    # 수정된 부분: 네이티브 Boolean 플래그 도입 및 부동소수점 비교 제거
+    show_support_legend = True 
     
     for lvl in support_levels:
         for ang in supports_angles:
@@ -373,10 +374,15 @@ if Turns_per_Tube > 0 and Turns_per_Tube < 2000:
             s_y = sup_lx * np.sin(ang)
             e_x = sup_rx * np.cos(ang)
             e_y = sup_rx * np.sin(ang)
+            
             fig.add_trace(go.Scatter3d(
                 x=[s_x, e_x], y=[s_y, e_y], z=[lvl, lvl],
-                mode='lines', line=dict(color='black', width=4), name='Coil Support', hoverinfo='skip', showlegend=(lvl == support_levels[0] and ang == supports_angles[0])
+                mode='lines', line=dict(color='black', width=4), 
+                name='Coil Support', hoverinfo='skip', 
+                showlegend=show_support_legend
             ))
+            # 첫 번째 지지대를 그린 후에는 레전드 표출을 끕니다.
+            show_support_legend = False
 
     fig.update_layout(
         scene=dict(xaxis_title='X (mm)', yaxis_title='Y (mm)', zaxis_title='Height (mm)', aspectmode='data'),
