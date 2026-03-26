@@ -9,7 +9,7 @@ st.title("플랜트 공정 설계: Helical Tube Heat Exchanger 최적화")
 st.markdown("---")
 
 # =========================================================
-# [A] 글로벌 상태(Session State) 초기화 (병렬 튜브, Mandrel 추가)
+# [A] 글로벌 상태(Session State) 초기화 (Full Spec)
 # =========================================================
 init_state = {
     'tag_no': 'HE-101', 
@@ -27,8 +27,8 @@ init_state = {
     'T_hot_in': 150.0, 'T_hot_out': 80.0,
     'T_cold_in': 30.0, 'T_cold_out': 60.0,
     'allowable_dp_tube': 1.5, 'allowable_dp_shell': 0.5,
-    # 3. 기하학적 변수 (병렬 튜브 N_p, Mandrel D_m 추가)
-    'N_p': 3,  # 병렬 튜브 수
+    # 3. 기하학적 변수 (병렬 튜브 N_p, Mandrel D_m)
+    'N_p': 4,  # 병렬 튜브 수 default 상향 (현실성 증대)
     'd_o': 25.4, 't_thick': 2.11, 'D_c': 400.0, 'pitch': 50.0, 'D_s': 500.0,
     'D_mandrel': 350.0, # Mandrel 외경
     'tube_material': 'Stainless Steel 316 (k = 16 W/m·K)', 'tube_k_wall': 16.0,
@@ -132,7 +132,7 @@ st.subheader("3. 기하학적 설계 (병렬 튜브 및 Mandrel 포함)")
 
 col_g1, col_g2, col_g3, col_g4 = st.columns(4)
 with col_g1:
-    st.number_input("병렬 튜브 수 (N_p, 가닥)", 1, 50, step=1, key='N_p', help="유량을 N_p개로 분산시켜 튜브 내 유속과 ΔP를 획기적으로 낮춥니다.")
+    st.number_input("병렬 튜브 수 (N_p, 가닥)", 1, 50, step=1, key='N_p', help="유량을 N_p개로 분산시켜 튜브 내 유속과 ΔP를 낮춥니다. 3D 시각화에서 색상별로 구분됩니다.")
     st.slider("튜브 외경 (d_o, mm)", 10.0, 50.0, step=0.1, key='d_o')
     st.number_input("튜브 두께 (t, mm)", 1.0, 5.0, step=0.1, key='t_thick')
     d_i = st.session_state['d_o'] - 2 * st.session_state['t_thick']
@@ -145,29 +145,29 @@ with col_g2:
     st.slider("코일 중심 직경 (D_c, mm)", float(st.session_state['d_o']*5), 2000.0, step=10.0, key='D_c')
     curvature_ratio = d_i / st.session_state['D_c']
     
-    # Mandrel 자동 계산 및 입력 (코일 내측 여유공간 5mm 가정)
+    # Mandrel 자동 계산
     max_mandrel = st.session_state['D_c'] - st.session_state['d_o']
     rec_mandrel = max(10.0, max_mandrel - 10.0)
     st.session_state['D_mandrel'] = min(st.session_state['D_mandrel'], max_mandrel)
-    st.number_input("Mandrel 외경 (D_m, mm)", 10.0, float(max_mandrel), value=float(rec_mandrel), key='D_mandrel', help="중앙부 바이패스를 막는 코어 기둥입니다. 코일 내측(D_c - d_o)보다 약간 작게 설계합니다.")
+    st.number_input("Mandrel 외경 (D_m, mm)", 10.0, float(max_mandrel), value=float(rec_mandrel), key='D_mandrel')
 
 with col_g3:
     st.slider("코일 피치 (p, mm)", float(st.session_state['d_o']*1.25), 300.0, step=1.0, key='pitch')
     min_Ds = st.session_state['D_c'] + st.session_state['d_o'] + 10.0
     st.session_state['D_s'] = max(st.session_state['D_s'], min_Ds)
-    st.number_input("쉘 내경 (D_s, mm)", float(min_Ds), 3000.0, step=10.0, key='D_s', help="코일 외경과 쉘 내벽 사이의 외부 바이패스를 결정합니다.")
+    st.number_input("쉘 내경 (D_s, mm)", float(min_Ds), 3000.0, step=10.0, key='D_s')
 
 with col_g4:
     st.number_input("Tube 오염계수 R_fi", 0.0, 0.02, format="%.6f", key='R_fi')
     st.number_input("Shell 오염계수 R_fo", 0.0, 0.02, format="%.6f", key='R_fo')
 
 # =========================================================
-# [F] 4. 풀스케일 수력학 연산 (N_p 분산 및 Shell ΔP)
+# [F] 4. 수력학 연산 (Core Logic)
 # =========================================================
 t_mu_pa = st.session_state.get('t_mu', 1.0) / 1000.0
 s_mu_pa = st.session_state.get('s_mu', 1.0) / 1000.0
 
-# [Tube-side] N_p를 반영한 유속 분산
+# [Tube-side] N_p 분산 유속
 m_hot_per_tube = (st.session_state['m_hot'] / 3600.0) / st.session_state['N_p']
 A_c = np.pi * ((d_i / 1000.0) ** 2) / 4.0
 v_tube = m_hot_per_tube / (st.session_state['t_rho'] * A_c) if A_c > 0 else 0
@@ -180,6 +180,7 @@ if "Liquid" in st.session_state['fluid_type']:
     f_c = (64.0 / Re * (1.0 + 0.033 * (np.log10(max(De, 1.0)))**4.0)) if Re < Re_crit else (0.304 / (max(Re, 1.0) ** 0.25) + 0.029 * np.sqrt(curvature_ratio))
     Nu_straight = 4.36 if Re < Re_crit else 0.023 * (max(Re, 1.0) ** 0.8) * (Pr ** 0.4)
 else:
+    # Slurry
     n_val = st.session_state['flow_index_n'] if "Power" in st.session_state['rheology_model'] else 1.0
     K_val = st.session_state['consistency_k'] if "Power" in st.session_state['rheology_model'] else st.session_state['plastic_visc']
     D_m_tube = d_i / 1000.0
@@ -196,19 +197,16 @@ else:
 Nu_calc = Nu_straight * (1.0 + 3.5 * curvature_ratio)
 h_i = (Nu_calc * st.session_state['t_k']) / (d_i / 1000.0)
 
-# [Shell-side] Mandrel을 반영한 유효 면적 및 Shell ΔP 산출
+# [Shell-side] Mandrel 반영 Shell ΔP
 m_cold_kg_s = st.session_state['m_cold'] / 3600.0
 D_s_m = st.session_state['D_s'] / 1000.0
 D_man_m = st.session_state['D_mandrel'] / 1000.0
 d_o_m = st.session_state['d_o'] / 1000.0
 
-# Shell 유효 유동 면적 (환상공간 면적 - 튜브 투영 면적 보정)
 A_annulus = (np.pi / 4.0) * (D_s_m**2 - D_man_m**2)
-# 근사적 Free Flow Area (Porosity 반영)
-A_free_flow = A_annulus * 0.5  
+A_free_flow = A_annulus * 0.5  # Porosity 보정
 v_shell = m_cold_kg_s / (st.session_state['s_rho'] * A_free_flow) if A_free_flow > 0 else 0.0
 
-# Shell 수력 직경 (Hydraulic Diameter)
 D_e_shell = D_s_m - D_man_m
 Re_shell = (st.session_state['s_rho'] * v_shell * D_e_shell) / s_mu_pa
 Pr_shell = (st.session_state['s_cp'] * s_mu_pa) / st.session_state['s_k']
@@ -218,17 +216,16 @@ h_o = (Nu_shell * st.session_state['s_k']) / d_o_m
 R_wall = (d_o_m * np.log(st.session_state['d_o'] / d_i)) / (2.0 * st.session_state['tube_k_wall'])
 U_calc = 1.0 / ((1.0 / max(h_o, 0.1)) + st.session_state['R_fo'] + R_wall + st.session_state['R_fi'] * (st.session_state['d_o'] / d_i) + (st.session_state['d_o'] / d_i) * (1.0 / max(h_i, 0.1)))
 
-# 면적 및 튜브 길이 (N_p 반영)
+# 면적 및 튜브 길이
 Area = (Q_kW * 1000.0) / (U_calc * LMTD) if LMTD > 0 else 0.0
 Total_Tube_Length = Area / (np.pi * d_o_m)
 Length_per_Tube = Total_Tube_Length / st.session_state['N_p']
 Turns_per_Tube = Length_per_Tube / (np.pi * (st.session_state['D_c'] / 1000.0))
 
-# 압력 강하 산출
+# ΔP 산출
 dp_tube_bar = (f_c * (Length_per_Tube / (d_i / 1000.0)) * (st.session_state['t_rho'] * (v_tube ** 2) / 2.0)) / 100000.0
-# Shell 측 길이 = Turns * Pitch
 L_shell = Turns_per_Tube * (st.session_state['pitch'] / 1000.0)
-f_s = 0.316 / (max(Re_shell, 1.0)**0.25) # 난류 환상유동 근사식
+f_s = 0.316 / (max(Re_shell, 1.0)**0.25) 
 dp_shell_bar = (f_s * (L_shell / D_e_shell) * (st.session_state['s_rho'] * (v_shell ** 2) / 2.0)) / 100000.0
 
 # =========================================================
@@ -236,7 +233,7 @@ dp_shell_bar = (f_s * (L_shell / D_e_shell) * (st.session_state['s_rho'] * (v_sh
 # =========================================================
 st.markdown("---")
 st.subheader("📄 Commercial HTHE Datasheet")
-st.caption(f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Validated with Mandrel & Multi-pass flow")
+st.caption(f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 datasheet_md = f"""
 | **Item Tag No.** | **{st.session_state['tag_no']}** | **Type** | Helical Coil Heat Exchanger |
@@ -247,47 +244,84 @@ datasheet_md = f"""
 | **Process Conditions** | **Tube Side (Inner)** | **Shell Side (Outer)** | |
 | Fluid Name | **{st.session_state['tube_fluid_name']}** | **{st.session_state['shell_fluid_name']}** | |
 | Total Flow Rate (kg/h) | {st.session_state['m_hot']:,.0f} | {st.session_state['m_cold']:,.0f} | |
-| Temp. In / Out (°C) | {st.session_state['T_hot_in']} / {st.session_state['T_hot_out']} | {st.session_state['T_cold_in']} / {st.session_state['T_cold_out']} | |
 | Viscosity (cP) | {st.session_state.get('t_mu', 'N/A')} | {st.session_state.get('s_mu', 'N/A')} | |
 | Velocity (m/s) | {v_tube:.2f} (per tube) | {v_shell:.2f} (Annulus) | |
 | Calc. Press. Drop (bar)| **{dp_tube_bar:.3f}** (Allow: {st.session_state['allowable_dp_tube']}) | **{dp_shell_bar:.3f}** (Allow: {st.session_state['allowable_dp_shell']}) | |
 | **Mechanical Design** | | | |
-| Tube OD x Thick. (mm) | {st.session_state['d_o']} x {st.session_state['t_thick']} (ID: {d_i:.2f}) | Tube Material | {st.session_state['tube_material']} |
-| Parallel Coils (N_p) | **{st.session_state['N_p']} ea** | Coil Pitch (mm) | {st.session_state['pitch']} |
+| Tube OD x Thick. (mm) | {st.session_state['d_o']} x {st.session_state['t_thick']} | Tube Material | {st.session_state['tube_material']} |
+| Parallel Coils (N_p) | **{st.session_state['N_p']} ea** (색상구분) | Coil Pitch (mm) | {st.session_state['pitch']} |
 | Coil Center Dia. (mm) | {st.session_state['D_c']} | Shell ID / Mandrel OD | {st.session_state['D_s']} mm / {st.session_state['D_mandrel']} mm |
-| Length per Tube (m) | {Length_per_Tube:,.1f} | Turns per Tube | {Turns_per_Tube:,.1f} |
+| Turns per Tube | {Turns_per_Tube:,.1f} | Length per Tube (m) | {Length_per_Tube:,.1f} |
 """
 st.markdown(datasheet_md)
 
 err_msg = []
 if dp_tube_bar > st.session_state['allowable_dp_tube']: err_msg.append(f"Tube 측 ΔP 초과 ({dp_tube_bar:.2f} bar)")
 if dp_shell_bar > st.session_state['allowable_dp_shell']: err_msg.append(f"Shell 측 ΔP 초과 ({dp_shell_bar:.2f} bar)")
-if v_tube > 2.5 and "Slurry" in st.session_state['fluid_type']: err_msg.append("Slurry 침식 유속(2.5m/s) 초과")
 
 if err_msg:
-    st.error("🚨 **Datasheet Warning (설계 반려):** " + " / ".join(err_msg) + " -> 병렬 튜브 수(N_p)를 늘리거나 직경을 키우십시오.")
+    st.error("🚨 **Datasheet Warning:** " + " / ".join(err_msg) + " -> N_p 수를 늘리거나 직경 조정을 고려하십시오.")
 else:
-    st.success("✅ **Datasheet Validated:** 모든 열역학/수력학 제약 조건을 완벽하게 통과했습니다.")
+    st.success("✅ **Datasheet Validated:** 모든 수력학적 제약 조건을 통과했습니다.")
 
 # =========================================================
-# [H] 6. 3D 형상 렌더링 (단일 코일 기준 시각화)
+# [H] 6. 3D 형상 렌더링 (**병렬 튜브 색상 구분 적용**)
 # =========================================================
+st.markdown("---")
+st.subheader("5. 3D 코일 형상 (Schematic Representation - 병렬 코일 색상 구분)")
+
 if Turns_per_Tube > 0 and Turns_per_Tube < 2000:
-    t = np.linspace(0, Turns_per_Tube * 2 * np.pi, int(max(Turns_per_Tube * 50, 100)))
-    x = (st.session_state['D_c'] / 2) * np.cos(t)
-    y = (st.session_state['D_c'] / 2) * np.sin(t)
-    z = (st.session_state['pitch'] / (2 * np.pi)) * t
-    
     fig = go.Figure()
-    # 코일 렌더링
-    fig.add_trace(go.Scatter3d(x=x, y=y, z=z, mode='lines', line=dict(color='darkblue', width=6), name='Coil'))
-    # Mandrel 가이드라인 렌더링 (투명한 원기둥 형상 근사)
+    
+    N_p = st.session_state['N_p']
+    turns = Turns_per_Tube
+    d_c = st.session_state['D_c']
+    p = st.session_state['pitch']
+    
+    # 코일 선명도를 위해 분할 수 조정
+    t_base = np.linspace(0, turns * 2 * np.pi, int(max(turns * 60, 150)))
+    z = (p / (2 * np.pi)) * t_base
+    
+    # Plotly 기본 컬러 사이클 사용 (또는 명시적 리스트 정의)
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+
+    # 병렬 튜브 수(N_p)만큼 루프를 돌며 오프셋 각도를 적용하여 그림
+    for i in range(N_p):
+        # 각 튜브의 시작 각도 오프셋 (라디안)
+        angle_offset = i * (2 * np.pi / N_p)
+        
+        # 궤적 계산 (t에 오프셋 추가)
+        x = (d_c / 2) * np.cos(t_base + angle_offset)
+        y = (d_c / 2) * np.sin(t_base + angle_offset)
+        
+        # 트레이스 추가 (색상 동적 할당)
+        fig.add_trace(go.Scatter3d(
+            x=x, y=y, z=z,
+            mode='lines',
+            line=dict(
+                color=colors[i % len(colors)], # 컬러 사이클 반복
+                width=6
+            ),
+            name=f'Coil Start {i+1}'
+        ))
+        
+    # Mandrel 가이드라인 렌더링
     z_man = np.linspace(0, max(z), 20)
-    theta = np.linspace(0, 2*np.pi, 20)
+    theta = np.linspace(0, 2*np.pi, 25)
     theta_grid, z_grid = np.meshgrid(theta, z_man)
     x_man = (st.session_state['D_mandrel'] / 2) * np.cos(theta_grid)
     y_man = (st.session_state['D_mandrel'] / 2) * np.sin(theta_grid)
-    fig.add_trace(go.Surface(x=x_man, y=y_man, z=z_grid, opacity=0.3, colorscale='Greys', showscale=False, name='Mandrel'))
+    fig.add_trace(go.Surface(x=x_man, y=y_man, z=z_grid, opacity=0.25, colorscale='Greys', showscale=False, name='Mandrel', hoverinfo='skip'))
 
-    fig.update_layout(scene=dict(xaxis_title='X (mm)', yaxis_title='Y (mm)', zaxis_title='Height (mm)', aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=500)
+    fig.update_layout(
+        scene=dict(
+            xaxis_title='X (mm)', yaxis_title='Y (mm)', zaxis_title='Height (mm)',
+            aspectmode='data'
+        ),
+        margin=dict(l=0, r=0, b=0, t=0),
+        height=600,
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+    )
     st.plotly_chart(fig, use_container_width=True)
+else:
+    st.warning("형상을 렌더링할 수 없습니다. 입력값을 확인하십시오.")
