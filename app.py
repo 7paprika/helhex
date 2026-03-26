@@ -277,4 +277,99 @@ datasheet_md = f"""
 | Temp. In / Out (°C) | {st.session_state['T_hot_in']} / {st.session_state['T_hot_out']} | {st.session_state['T_cold_in']} / {st.session_state['T_cold_out']} | |
 | Viscosity (cP) | {st.session_state.get('t_mu', 'N/A')} | {st.session_state.get('s_mu', 'N/A')} | |
 | Velocity (m/s) | {v_tube:.2f} (per tube) | {v_shell:.2f} (Annulus) | |
-| Calc. Press. Drop (bar)| **{dp_tube_bar:.3f}** (Allow: {st.session_state['allowable_dp_tube']}) | **{dp_shell_bar:.3f}** (Allow: {st.session_state['allow
+| Calc. Press. Drop (bar)| **{dp_tube_bar:.3f}** (Allow: {st.session_state['allowable_dp_tube']}) | **{dp_shell_bar:.3f}** (Allow: {st.session_state['allowable_dp_shell']}) | |
+| **Mechanical Design** | | | |
+| Tube OD x Thick. (mm) | {st.session_state['d_o']} x {st.session_state['t_thick']} | Tube Material | {st.session_state['tube_material']} |
+| Parallel Coils (N_p) | **{st.session_state['N_p']} ea** | Coil Pitch (mm) | {st.session_state['pitch']} |
+| Coil Center Dia. (mm) | {st.session_state['D_c']} | Shell ID / Mandrel OD | {st.session_state['D_s']} mm / {st.session_state['D_mandrel']} mm |
+| Turns per Tube | {Turns_per_Tube:,.1f} | Length per Tube (m) | {Length_per_Tube:,.1f} |
+"""
+st.markdown(datasheet_md)
+
+err_msg = []
+if dp_tube_bar > st.session_state['allowable_dp_tube']: err_msg.append(f"Tube 측 ΔP 초과")
+if dp_shell_bar > st.session_state['allowable_dp_shell']: err_msg.append(f"Shell 측 ΔP 초과")
+if Estimated_Total_Height > 10.0: err_msg.append(f"장비 총 높이 10m 초과 (레이아웃 한계)")
+
+if err_msg:
+    st.error("🚨 **Datasheet Warning:** " + " / ".join(err_msg) + " -> N_p 수를 늘리거나 기하학적 직경(D_c, D_s)을 키우십시오.")
+else:
+    st.success("✅ **Datasheet Validated:** 모든 수력학 및 기계적 구조 제약 조건을 통과했습니다.")
+
+# =========================================================
+# [I] 5. 3D 형상 렌더링
+# =========================================================
+st.markdown("---")
+st.subheader("5. 3D 코일 형상 (Schematic Representation)")
+
+if Turns_per_Tube > 0 and Turns_per_Tube < 2000:
+    fig = go.Figure()
+    
+    N_p = st.session_state['N_p']
+    turns = Turns_per_Tube
+    d_c = st.session_state['D_c']
+    p = st.session_state['pitch']
+    t_max = turns * 2 * np.pi
+    
+    t_base = np.linspace(0, t_max, int(max(turns * 60, 150)))
+    z = (p / (2 * np.pi)) * t_base
+    coil_height = max(z) if len(z) > 0 else 1.0
+    
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+    for i in range(int(N_p)):
+        angle_offset = i * (2 * np.pi / N_p)
+        x = (d_c / 2) * np.cos(t_base + angle_offset)
+        y = (d_c / 2) * np.sin(t_base + angle_offset)
+        fig.add_trace(go.Scatter3d(
+            x=x, y=y, z=z, mode='lines',
+            line=dict(color=colors[i % len(colors)], width=6),
+            name=f'Coil {i+1}'
+        ))
+        
+    z_surf = np.linspace(0, coil_height, 20)
+    theta_surf = np.linspace(0, 2*np.pi, 25)
+    theta_grid, z_grid = np.meshgrid(theta_surf, z_surf)
+    
+    x_man = (st.session_state['D_mandrel'] / 2) * np.cos(theta_grid)
+    y_man = (st.session_state['D_mandrel'] / 2) * np.sin(theta_grid)
+    fig.add_trace(go.Surface(x=x_man, y=y_man, z=z_grid, opacity=0.15, colorscale='Greys', showscale=False, name='Mandrel', hoverinfo='skip'))
+    
+    x_shell = (st.session_state['D_s'] / 2) * np.cos(theta_grid)
+    y_shell = (st.session_state['D_s'] / 2) * np.sin(theta_grid)
+    fig.add_trace(go.Surface(x=x_shell, y=y_shell, z=z_grid, opacity=0.08, colorscale='Blues', showscale=False, name='Shell', hoverinfo='skip'))
+    
+    noz_h = st.session_state['d_o'] * 3.0
+    in_x = (d_c / 2) * np.cos(0)
+    in_y = (d_c / 2) * np.sin(0)
+    fig.add_trace(go.Scatter3d(x=[in_x, in_x], y=[in_y, in_y], z=[coil_height, coil_height + noz_h], mode='lines', line=dict(color='red', width=12), name='Tube Inlet'))
+    
+    out_x = (d_c / 2) * np.cos(t_max % (2 * np.pi))
+    out_y = (d_c / 2) * np.sin(t_max % (2 * np.pi))
+    fig.add_trace(go.Scatter3d(x=[out_x, out_x], y=[out_y, out_y], z=[0, -noz_h], mode='lines', line=dict(color='red', width=12), name='Tube Outlet'))
+    
+    sh_in_r = st.session_state['D_s'] / 2.0
+    fig.add_trace(go.Scatter3d(x=[sh_in_r, sh_in_r + noz_h], y=[0, 0], z=[p/2.0, p/2.0], mode='lines', line=dict(color='blue', width=12), name='Shell Inlet'))
+    fig.add_trace(go.Scatter3d(x=[-sh_in_r, -sh_in_r - noz_h], y=[0, 0], z=[coil_height - p/2.0, coil_height - p/2.0], mode='lines', line=dict(color='blue', width=12), name='Shell Outlet'))
+    
+    sup_lx = (st.session_state['D_mandrel'] / 2.0)
+    sup_rx = (st.session_state['D_s'] / 2.0)
+    supports_angles = [0, np.pi/2, np.pi, 3*np.pi/2]
+    support_levels = [coil_height * 0.25, coil_height * 0.5, coil_height * 0.75]
+    
+    show_support_legend = True 
+    for lvl in support_levels:
+        for ang in supports_angles:
+            fig.add_trace(go.Scatter3d(
+                x=[sup_lx * np.cos(ang), sup_rx * np.cos(ang)], 
+                y=[sup_lx * np.sin(ang), sup_rx * np.sin(ang)], 
+                z=[lvl, lvl],
+                mode='lines', line=dict(color='black', width=4), 
+                name='Coil Support', hoverinfo='skip', 
+                showlegend=show_support_legend
+            ))
+            show_support_legend = False
+
+    fig.update_layout(scene=dict(xaxis_title='X (mm)', yaxis_title='Y (mm)', zaxis_title='Height (mm)', aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=700, legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.warning("형상을 렌더링할 수 없습니다. 온도 조건 또는 물리적 변수를 확인하십시오.")
