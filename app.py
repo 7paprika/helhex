@@ -14,7 +14,7 @@ st.markdown("---")
 init_state = {
     'tag_no': 'HE-101', 
     'tube_fluid_name': 'Process Slurry',
-    'shell_fluid_name': 'Cooling Water',
+    'shell_fluid_name': 'Hot Water / Steam',
     'fluid_type': "Liquid (뉴턴 유체 - 물, 오일 등)",
     't_rho': 998.0, 't_cp': 4180.0, 't_k': 0.6, 't_mu': 1.0, 
     's_rho': 998.0, 's_mu': 1.0, 's_cp': 4180.0, 's_k': 0.6,
@@ -22,8 +22,8 @@ init_state = {
     'tau_y': 5.0, 'plastic_visc': 0.05,
     'consistency_k': 0.1, 'flow_index_n': 0.8,
     'm_hot': 5000.0, 'm_cold': 8000.0,
-    'T_hot_in': 150.0, 'T_hot_out': 80.0,
-    'T_cold_in': 30.0, 'T_cold_out': 60.0,
+    'T_hot_in': 30.0, 'T_hot_out': 80.0,   # 기본값을 Heater 모드로 변경
+    'T_cold_in': 120.0, 'T_cold_out': 90.0,
     'allowable_dp_tube': 1.5, 'allowable_dp_shell': 0.5,
     'N_p': 3, 
     'd_o': 25.4, 't_thick': 2.11, 'D_c': 400.0, 'pitch': 50.0, 'D_s': 500.0,
@@ -98,41 +98,79 @@ with col_shell:
 st.markdown("---")
 
 # =========================================================
-# [D] 2. 공정 운전 조건 (에너지 수지 Estimation 연동)
+# [D] 2. 공정 운전 조건 (Heater / Cooler 자동 판별 로직 적용)
 # =========================================================
 st.subheader("2. 공정 운전 조건 (Energy Balance)")
 
-Q_kW = (st.session_state['m_hot'] / 3600.0) * (st.session_state['t_cp'] / 1000.0) * abs(st.session_state['T_hot_in'] - st.session_state['T_hot_out'])
-delta_T_shell = abs(st.session_state['T_cold_out'] - st.session_state['T_cold_in'])
+# 변수 추출
+t_in = st.session_state['T_hot_in']
+t_out = st.session_state['T_hot_out']
+s_in = st.session_state['T_cold_in']
+s_out = st.session_state['T_cold_out']
+m_t = st.session_state['m_hot']
+m_s = st.session_state['m_cold']
+
+# 튜브 열부하 (Q) 계산
+Q_kW = (m_t / 3600.0) * (st.session_state['t_cp'] / 1000.0) * abs(t_in - t_out)
 s_cp_kJ = st.session_state['s_cp'] / 1000.0
+
+# 🌟 튜브가 가열되는지(Heater), 냉각되는지(Cooler) 자동 판별
+is_tube_heating = (t_out > t_in)
+
+# Shell 추정치 로직
+delta_T_shell = abs(s_in - s_out)
 est_m_cold = (Q_kW * 3600.0) / (s_cp_kJ * max(0.1, delta_T_shell)) if delta_T_shell > 0 else 0.0
-est_T_cold_out = st.session_state['T_cold_in'] + ((Q_kW * 3600.0) / (max(0.1, st.session_state['m_cold']) * s_cp_kJ))
+
+if is_tube_heating:
+    # 튜브가 가열(Heater) -> Shell은 열을 뺏겨서 식어야 함
+    est_T_cold_out = s_in - ((Q_kW * 3600.0) / (max(0.1, m_s) * s_cp_kJ))
+    op_mode = "🔥 Heater Mode (가열)"
+else:
+    # 튜브가 냉각(Cooler) -> Shell은 열을 받아서 뜨거워져야 함
+    est_T_cold_out = s_in + ((Q_kW * 3600.0) / (max(0.1, m_s) * s_cp_kJ))
+    op_mode = "❄️ Cooler Mode (냉각)"
 
 col_pc1, col_pc2, col_pc3, col_pc4 = st.columns(4)
 with col_pc1:
     st.number_input("Tube 유량 (kg/h)", step=100.0, key='m_hot')
     st.number_input("Shell 유량 (kg/h)", step=100.0, key='m_cold')
-    st.caption(f"💡 필요 냉각 유량 추정치: **{est_m_cold:,.0f} kg/h**")
+    st.caption(f"💡 필요 쉘 유량 추정치: **{est_m_cold:,.0f} kg/h**")
 with col_pc2:
     st.number_input("Tube 입구 온도 (°C)", key='T_hot_in')
     st.number_input("Tube 목표 출구 온도 (°C)", key='T_hot_out')
-    st.caption(f"🔥 Tube 열부하(Q): **{Q_kW:,.1f} kW**")
+    st.caption(f"**운전 모드: {op_mode}** (Q: {Q_kW:,.1f} kW)")
 with col_pc3:
     st.number_input("Shell 입구 온도 (°C)", key='T_cold_in')
     st.number_input("Shell 목표 출구 온도 (°C)", key='T_cold_out')
-    st.caption(f"💡 예상 출구 온도 추정치: **{est_T_cold_out:,.1f} °C**")
+    st.caption(f"💡 예상 쉘 출구 온도: **{est_T_cold_out:,.1f} °C**")
 with col_pc4:
     st.number_input("Tube 허용 ΔP (bar)", 0.1, 10.0, step=0.1, key='allowable_dp_tube')
     st.number_input("Shell 허용 ΔP (bar)", 0.1, 10.0, step=0.1, key='allowable_dp_shell')
 
-dT1 = st.session_state['T_hot_in'] - st.session_state['T_cold_out']
-dT2 = st.session_state['T_hot_out'] - st.session_state['T_cold_in']
-LMTD = (dT1 - dT2) / np.log(dT1 / dT2) if (dT1 != dT2 and dT1 > 0 and dT2 > 0) else (dT1 if dT1 > 0 else 1.0)
+# 🌟 LMTD 방향 역전 방지 (대향류 Counter-current)
+if is_tube_heating:
+    dT1 = s_in - t_out  # Hot fluid(Shell) in - Cold fluid(Tube) out
+    dT2 = s_out - t_in  # Hot fluid(Shell) out - Cold fluid(Tube) in
+else:
+    dT1 = t_in - s_out  # Hot fluid(Tube) in - Cold fluid(Shell) out
+    dT2 = t_out - s_in  # Hot fluid(Tube) out - Cold fluid(Shell) in
+
+lmtd_error = False
+if dT1 == dT2 and dT1 > 0:
+    LMTD = dT1
+elif dT1 > 0 and dT2 > 0:
+    LMTD = (dT1 - dT2) / np.log(dT1 / dT2)
+else:
+    LMTD = 1.0  # 방어 코드
+    lmtd_error = True
+
+if lmtd_error:
+    st.error("🚨 **열역학 에러 (Temperature Cross):** 열전달이 불가능한 온도 역전 현상이 발생했습니다. 입출구 온도를 다시 설정하십시오.")
 
 st.markdown("---")
 
 # =========================================================
-# [E] 3. 기하학적 설계 (상업용 규격 및 오염계수 레퍼런스 추가)
+# [E] 3. 기하학적 설계 (상업용 규격 및 오염계수 레퍼런스)
 # =========================================================
 st.subheader("3. 기하학적 설계 (상업용 표준 규격 및 오염계수 적용)")
 
@@ -152,16 +190,6 @@ with col_g1:
     else:
         st.session_state['d_o'] = do_options[selected_do]
 
-    with st.expander("💡 튜브 외경(OD) 가이드"):
-        st.markdown("""
-        | 규격 (inch) | 외경 (mm) | 주요 특성 및 추천 적용 분야 |
-        | :--- | :--- | :--- |
-        | **3/8"** | 9.53 | 유속이 매우 빨라 압력 손실이 큼. 초소형 장비용. |
-        | **1/2"** | 12.7 | 일반적인 컴팩트 설계에 적합. 공간 제약 시 유리. |
-        | **3/4"** | 19.05 | 압력 손실과 제작 편의성 균형이 가장 양호 (표준). |
-        | **1"** | 25.4 | 대유량 순환 시 유리. 슬러리 적용 시 플러깅 방지 권장. |
-        """)
-
     bwg_options = {
         'BWG 10 (3.40 mm)': 3.40, 'BWG 12 (2.77 mm)': 2.77,
         'BWG 14 (2.11 mm)': 2.11, 'BWG 16 (1.65 mm)': 1.65,
@@ -174,22 +202,9 @@ with col_g1:
     else:
         st.session_state['t_thick'] = bwg_options[selected_bwg]
 
-    with st.expander("💡 튜브 두께(BWG) 가이드"):
-        st.markdown("""
-        | BWG | mm | 주요 적용 및 특징 |
-        | :--- | :--- | :--- |
-        | **10** | 3.40 | 고압/부식성 유체, 밴딩 반경이 매우 좁은 경우 |
-        | **12** | 2.77 | 중고압 헬리컬 코일, 기계적 강도가 요구될 때 |
-        | **14** | 2.11 | 일반적인 산업용 열교환기 튜브 표준 두께 |
-        | **16** | 1.65 | 가장 범용적인 튜브 두께 (유량 확보와 내압 균형) |
-        | **18** | 1.24 | 저압 환경, 열전달 효율 극대화 요구 시 |
-        | **20** | 0.89 | 계측기 라인 또는 매우 작은 소구경 튜브용 |
-        | **22** | 0.71 | 초소형/정밀 의료용 또는 특수 분석 장비용 |
-        """)
-
     d_i = st.session_state['d_o'] - 2 * st.session_state['t_thick']
     if d_i <= 0:
-        st.error("🚨 설계 에러: 튜브 두께가 외경보다 두꺼워 내경(ID)이 존재하지 않습니다!")
+        st.error("🚨 설계 에러: 튜브 두께가 너무 두껍습니다.")
     else:
         st.caption(f"✓ 유효 내경 (ID): **{d_i:.2f} mm**")
 
@@ -200,40 +215,24 @@ with col_g1:
 with col_g2:
     rec_Dc = st.session_state['d_o'] * 10.0
     st.number_input("코일 중심 직경 (D_c, mm)", step=10.0, key='D_c')
-    st.caption(f"💡 추천 최소값: **{rec_Dc:.1f} mm** (밴딩 파열 한계)")
+    st.caption(f"💡 추천 최소값: **{rec_Dc:.1f} mm**")
     
     rec_mandrel = max(10.0, st.session_state['D_c'] - st.session_state['d_o'] - 10.0)
     st.number_input("Mandrel 외경 (D_m, mm)", step=5.0, key='D_mandrel')
-    st.caption(f"💡 추천 최적값: **{rec_mandrel:.1f} mm** (내측 간섭 여유)")
+    st.caption(f"💡 추천 최적값: **{rec_mandrel:.1f} mm**")
 
 with col_g3:
     rec_pitch = st.session_state['d_o'] * 1.25
     st.number_input("코일 피치 (p, mm)", step=1.0, key='pitch')
-    st.caption(f"💡 추천 최소값: **{rec_pitch:.1f} mm** (외경의 1.25배)")
+    st.caption(f"💡 추천 최소값: **{rec_pitch:.1f} mm**")
     
     rec_Ds = st.session_state['D_c'] + st.session_state['d_o'] + 40.0
     st.number_input("쉘 내경 (D_s, mm)", step=10.0, key='D_s')
-    st.caption(f"💡 추천 최소값: **{rec_Ds:.1f} mm** (외부 클리어런스)")
+    st.caption(f"💡 추천 최소값: **{rec_Ds:.1f} mm**")
 
 with col_g4:
     st.number_input("Tube 오염계수 R_fi (m²·K/W)", 0.0, 0.02, format="%.6f", key='R_fi')
     st.number_input("Shell 오염계수 R_fo (m²·K/W)", 0.0, 0.02, format="%.6f", key='R_fo')
-    
-    with st.expander("💡 TEMA 오염계수(Fouling) 레퍼런스"):
-        st.markdown("""
-        **(단위: $m^2\cdot K/W$)**
-        | 유체 종류 (Fluid Type) | 오염계수 권장치 | 비고 |
-        | :--- | :--- | :--- |
-        | **증류수 / 청정수** | 0.00009 ~ 0.00018 | 스케일 발생이 거의 없음 |
-        | **순환 냉각수 (Cooling Water)** | 0.00018 ~ 0.00035 | 수질 관리 상태에 따라 유동적 |
-        | **해수 (Sea Water)** | 0.00035 ~ 0.00053 | 생물학적 오염(Bio-fouling) 주의 |
-        | **공기 / 청정 가스** | 0.00018 ~ 0.00035 | 입자가 없는 가스 기준 |
-        | **경질유 / 윤활유 (Lube Oil)** | 0.00018 ~ 0.00035 | 정제된 오일류 |
-        | **중질유 / 크루드 (Crude Oil)** | 0.00053 ~ 0.00123 | 점도가 높고 퇴적물 발생 쉬움 |
-        | **공정 슬러리 (Process Slurry)** | 0.00088 ~ 0.00200+ | 입자 퇴적 극심. 유속 유지 필수 |
-        
-        *※ 주의: 쉘(Shell) 측은 기계적 세척(Cleaning)이 매우 까다로우므로 튜브 측보다 보수적으로(높게) 잡는 것을 권장합니다.*
-        """)
 
 # =========================================================
 # [F] 4. 수력학 코어 연산 
@@ -242,7 +241,7 @@ t_mu_pa = st.session_state.get('t_mu', 1.0) / 1000.0
 s_mu_pa = st.session_state.get('s_mu', 1.0) / 1000.0
 curvature_ratio = d_i / st.session_state['D_c'] if st.session_state['D_c'] > 0 else 0
 
-m_hot_per_tube = (st.session_state['m_hot'] / 3600.0) / max(1, st.session_state['N_p'])
+m_hot_per_tube = (m_t / 3600.0) / max(1, st.session_state['N_p'])
 A_c = np.pi * ((d_i / 1000.0) ** 2) / 4.0 if d_i > 0 else 1e-6
 v_tube = m_hot_per_tube / (st.session_state['t_rho'] * A_c)
 
@@ -270,7 +269,7 @@ else:
 Nu_calc = Nu_straight * (1.0 + 3.5 * curvature_ratio)
 h_i = (Nu_calc * st.session_state['t_k']) / (max(1e-6, d_i) / 1000.0)
 
-m_cold_kg_s = st.session_state['m_cold'] / 3600.0
+m_cold_kg_s = m_s / 3600.0
 D_s_m = st.session_state['D_s'] / 1000.0
 D_man_m = st.session_state['D_mandrel'] / 1000.0
 d_o_m = st.session_state['d_o'] / 1000.0
@@ -288,7 +287,7 @@ h_o = (Nu_shell * st.session_state['s_k']) / d_o_m
 R_wall = (d_o_m * np.log(st.session_state['d_o'] / max(1e-6, d_i))) / (2.0 * max(1e-6, st.session_state['tube_k_wall'])) if d_i > 0 else 0
 U_calc = 1.0 / ((1.0 / max(h_o, 0.1)) + st.session_state['R_fo'] + R_wall + st.session_state['R_fi'] * (st.session_state['d_o'] / max(1e-6, d_i)) + (st.session_state['d_o'] / max(1e-6, d_i)) * (1.0 / max(h_i, 0.1)))
 
-Area = (Q_kW * 1000.0) / (U_calc * LMTD) if LMTD > 0 else 0.0
+Area = (Q_kW * 1000.0) / (U_calc * LMTD) if not lmtd_error else 0.0
 Total_Tube_Length = Area / (np.pi * d_o_m) if d_o_m > 0 else 0.0
 Length_per_Tube = Total_Tube_Length / max(1, st.session_state['N_p'])
 Turns_per_Tube = Length_per_Tube / (np.pi * (st.session_state['D_c'] / 1000.0)) if st.session_state['D_c'] > 0 else 0.0
@@ -344,10 +343,11 @@ datasheet_md = f"""
 st.markdown(datasheet_md)
 
 err_msg = []
+if lmtd_error: err_msg.append("Temperature Cross (온도 역전) 발생")
 if dp_tube_bar > st.session_state['allowable_dp_tube']: err_msg.append(f"Tube 측 ΔP 초과")
 if dp_shell_bar > st.session_state['allowable_dp_shell']: err_msg.append(f"Shell 측 ΔP 초과")
-if Estimated_Total_Height > 10.0: err_msg.append(f"장비 총 높이 10m 초과 (레이아웃 한계)")
-if d_i <= 0: err_msg.append("물리적 설계 에러: 내경(ID) 계산 불가")
+if Estimated_Total_Height > 10.0: err_msg.append(f"장비 총 높이 10m 초과")
+if d_i <= 0: err_msg.append("내경(ID) 계산 불가")
 
 if err_msg:
     st.error("🚨 **Datasheet Warning:** " + " / ".join(err_msg))
@@ -360,7 +360,7 @@ else:
 st.markdown("---")
 st.subheader("5. 3D 코일 형상 (Schematic Representation)")
 
-if Turns_per_Tube > 0 and Turns_per_Tube < 2000 and d_i > 0:
+if Turns_per_Tube > 0 and Turns_per_Tube < 2000 and d_i > 0 and not lmtd_error:
     fig = go.Figure()
     
     N_p = st.session_state['N_p']
@@ -430,4 +430,4 @@ if Turns_per_Tube > 0 and Turns_per_Tube < 2000 and d_i > 0:
     fig.update_layout(scene=dict(xaxis_title='X (mm)', yaxis_title='Y (mm)', zaxis_title='Height (mm)', aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0), height=700, legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.warning("형상을 렌더링할 수 없습니다. 물리적 변수(ID 등)를 다시 확인하십시오.")
+    st.warning("형상을 렌더링할 수 없습니다. 온도 조건(Temperature Cross) 또는 물리적 변수를 다시 확인하십시오.")
