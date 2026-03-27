@@ -77,7 +77,7 @@ with col_tube:
     st.number_input("비열 (J/kg·K)", key='t_cp')
     st.number_input("열전도도 (W/m·K)", key='t_k')
     if "Liquid" in st.session_state['fluid_type']:
-        st.number_input("동점성 계수 (cP)", format="%.2f", key='t_mu')
+        st.number_input("점도 (cP)", format="%.2f", key='t_mu')
     else:
         st.selectbox("유변학 모델", ["Power-law (멱법칙)", "Bingham Plastic (빙햄 가소성)"], key='rheology_model')
         if "Bingham" in st.session_state['rheology_model']:
