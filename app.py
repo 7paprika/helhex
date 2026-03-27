@@ -9,7 +9,7 @@ st.title("플랜트 공정 설계: Helical Tube Heat Exchanger 최적화")
 st.markdown("---")
 
 # =========================================================
-# [A] 글로벌 상태(Session State) 초기화 
+# [A] 글로벌 상태(Session State) 초기화
 # =========================================================
 init_state = {
     'tag_no': 'HE-101', 
@@ -132,21 +132,18 @@ LMTD = (dT1 - dT2) / np.log(dT1 / dT2) if (dT1 != dT2 and dT1 > 0 and dT2 > 0) e
 st.markdown("---")
 
 # =========================================================
-# [E] 3. 기하학적 설계 (상업용 규격 Dropdown 적용)
+# [E] 3. 기하학적 설계 (상업용 규격 및 오염계수 레퍼런스 추가)
 # =========================================================
-st.subheader("3. 기하학적 설계 (상업용 표준 규격 및 직접 입력)")
+st.subheader("3. 기하학적 설계 (상업용 표준 규격 및 오염계수 적용)")
 
 col_g1, col_g2, col_g3, col_g4 = st.columns(4)
 
 with col_g1:
     st.number_input("병렬 튜브 수 (N_p, 가닥)", 1, 50, step=1, key='N_p')
     
-    # 튜브 외경(OD) 드롭다운
     do_options = {
-        '3/8" (9.53 mm)': 9.53,
-        '1/2" (12.7 mm)': 12.7,
-        '3/4" (19.05 mm)': 19.05,
-        '1" (25.4 mm)': 25.4,
+        '3/8" (9.53 mm)': 9.53, '1/2" (12.7 mm)': 12.7,
+        '3/4" (19.05 mm)': 19.05, '1" (25.4 mm)': 25.4,
         'Custom (직접 입력)': st.session_state.get('d_o_custom', 25.4)
     }
     selected_do = st.selectbox("튜브 외경 (OD)", list(do_options.keys()))
@@ -165,16 +162,11 @@ with col_g1:
         | **1"** | 25.4 | 대유량 순환 시 유리. 슬러리 적용 시 플러깅 방지 권장. |
         """)
 
-    # 튜브 두께(BWG) 드롭다운
     bwg_options = {
-        'BWG 10 (3.40 mm)': 3.40,
-        'BWG 12 (2.77 mm)': 2.77,
-        'BWG 14 (2.11 mm)': 2.11,
-        'BWG 16 (1.65 mm)': 1.65,
-        'BWG 18 (1.24 mm)': 1.24,
-        'BWG 20 (0.89 mm)': 0.89,
-        'BWG 22 (0.71 mm)': 0.71,
-        'Custom (직접 입력)': st.session_state.get('t_thick_custom', 2.11)
+        'BWG 10 (3.40 mm)': 3.40, 'BWG 12 (2.77 mm)': 2.77,
+        'BWG 14 (2.11 mm)': 2.11, 'BWG 16 (1.65 mm)': 1.65,
+        'BWG 18 (1.24 mm)': 1.24, 'BWG 20 (0.89 mm)': 0.89,
+        'BWG 22 (0.71 mm)': 0.71, 'Custom (직접 입력)': st.session_state.get('t_thick_custom', 2.11)
     }
     selected_bwg = st.selectbox("튜브 두께 (BWG)", list(bwg_options.keys()))
     if "Custom" in selected_bwg:
@@ -224,11 +216,27 @@ with col_g3:
     st.caption(f"💡 추천 최소값: **{rec_Ds:.1f} mm** (외부 클리어런스)")
 
 with col_g4:
-    st.number_input("Tube 오염계수 R_fi", 0.0, 0.02, format="%.6f", key='R_fi')
-    st.number_input("Shell 오염계수 R_fo", 0.0, 0.02, format="%.6f", key='R_fo')
+    st.number_input("Tube 오염계수 R_fi (m²·K/W)", 0.0, 0.02, format="%.6f", key='R_fi')
+    st.number_input("Shell 오염계수 R_fo (m²·K/W)", 0.0, 0.02, format="%.6f", key='R_fo')
+    
+    with st.expander("💡 TEMA 오염계수(Fouling) 레퍼런스"):
+        st.markdown("""
+        **(단위: $m^2\cdot K/W$)**
+        | 유체 종류 (Fluid Type) | 오염계수 권장치 | 비고 |
+        | :--- | :--- | :--- |
+        | **증류수 / 청정수** | 0.00009 ~ 0.00018 | 스케일 발생이 거의 없음 |
+        | **순환 냉각수 (Cooling Water)** | 0.00018 ~ 0.00035 | 수질 관리 상태에 따라 유동적 |
+        | **해수 (Sea Water)** | 0.00035 ~ 0.00053 | 생물학적 오염(Bio-fouling) 주의 |
+        | **공기 / 청정 가스** | 0.00018 ~ 0.00035 | 입자가 없는 가스 기준 |
+        | **경질유 / 윤활유 (Lube Oil)** | 0.00018 ~ 0.00035 | 정제된 오일류 |
+        | **중질유 / 크루드 (Crude Oil)** | 0.00053 ~ 0.00123 | 점도가 높고 퇴적물 발생 쉬움 |
+        | **공정 슬러리 (Process Slurry)** | 0.00088 ~ 0.00200+ | 입자 퇴적 극심. 유속 유지 필수 |
+        
+        *※ 주의: 쉘(Shell) 측은 기계적 세척(Cleaning)이 매우 까다로우므로 튜브 측보다 보수적으로(높게) 잡는 것을 권장합니다.*
+        """)
 
 # =========================================================
-# [F] 4. 수력학 코어 연산 (백그라운드 선행 연산)
+# [F] 4. 수력학 코어 연산 
 # =========================================================
 t_mu_pa = st.session_state.get('t_mu', 1.0) / 1000.0
 s_mu_pa = st.session_state.get('s_mu', 1.0) / 1000.0
@@ -291,7 +299,7 @@ f_s = 0.316 / (max(Re_shell, 1.0)**0.25)
 dp_shell_bar = (f_s * (L_shell_m / max(1e-6, D_e_shell)) * (st.session_state['s_rho'] * (v_shell ** 2) / 2.0)) / 100000.0
 
 # =========================================================
-# [G] 실시간 Bounding Box 표시 (섹션 3 하단)
+# [G] 실시간 Bounding Box 표시
 # =========================================================
 st.markdown("#### 📐 실시간 장비 예상 규격 (Estimated Bounding Box)")
 Estimated_Total_Height = L_shell_m + (2.0 * D_s_m) 
